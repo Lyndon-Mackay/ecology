@@ -1,5 +1,6 @@
 extern crate rand;
 
+use rand::rngs::ThreadRng;
 use rand::Rng;
 
 use std::env;
@@ -37,6 +38,17 @@ enum ForestFeature {
     Tree(FloraVariant),
     LumberSeedling(Woodcutter, Seedling),
     BearTree(BearInfo, FloraVariant),
+}
+
+enum MatureTree {
+    Tree,
+    Elder,
+}
+
+struct MatureTreeLocation {
+    m_tree: MatureTree,
+    x: usize,
+    y: usize,
 }
 
 pub trait Growing<T> {
@@ -116,6 +128,29 @@ impl Forest {
     fn get(&self, x: usize, y: usize) -> Option<&ForestFeature> {
         self.layout.get(x * self.size + y)
     }
+    fn get_mature_trees(&self) -> Vec<MatureTreeLocation> {
+        self.layout
+            .iter()
+            .enumerate()
+            .filter_map(|(i, x)| match *x {
+                ForestFeature::Tree(t) => match t {
+                    FloraVariant::Tree(_) => Some(MatureTreeLocation {
+                        m_tree: MatureTree::Tree,
+                        x: i / self.size,
+                        y: i % self.size,
+                    }),
+                    FloraVariant::Elder(_) => Some(MatureTreeLocation {
+                        m_tree: MatureTree::Elder,
+                        x: i / self.size,
+                        y: i % self.size,
+                    }),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect()
+    }
+
     fn age_trees(&mut self) {
         self.layout = self.layout.iter().map(|x| x.age()).collect();
     }
@@ -152,6 +187,16 @@ impl Forest {
         }
         returned_vec
     }
+    fn plant_sapling(&mut self, x: usize, y: usize) {
+        let new_loc = self.layout[x * self.size + y];
+
+        if let ForestFeature::Empty = new_loc {
+            self.layout[x * self.size + y] =
+                ForestFeature::Tree(FloraVariant::Sapling(Seedling { current_age: 0 }));
+        } else {
+            panic!("planting in a non empty zone {} {} {:?}", x, y, new_loc);
+        }
+    }
 }
 
 impl fmt::Display for Forest {
@@ -186,6 +231,7 @@ fn main() {
         panic!("Should have one argument the size of the map");
     }
 
+    let mut rng = rand::thread_rng();
     let size = &args[1];
 
     let size = size.parse().expect("positive number expected");
@@ -195,6 +241,9 @@ fn main() {
     for year in (1..400) {
         for month in (1..12) {
             simulated_forest.age_trees();
+
+            process_spawning(&mut simulated_forest, &mut rng);
+
             println!("{}", simulated_forest);
             println!("{:-<1$}", "", size * 2);
         }
@@ -206,4 +255,35 @@ fn main() {
     }
 
     println!("Hello, world!");
+}
+
+fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
+    let mature_tress = simulated_forest.get_mature_trees();
+
+    for m in mature_tress {
+        let gen = rng.gen_range(0, 10);
+        match m.m_tree {
+            MatureTree::Tree if gen == 0 => {
+                let potential_locations = simulated_forest.get_potential_spawn_sites(m.x, m.y);
+                if potential_locations.is_empty() {
+                    continue;
+                }
+                let (new_site_x, new_site_y) = potential_locations
+                    .get(rng.gen_range(0, potential_locations.len()))
+                    .unwrap();
+                simulated_forest.plant_sapling(*new_site_x, *new_site_y);
+            }
+            MatureTree::Elder if gen == 0 || gen == 1 => {
+                let potential_locations = simulated_forest.get_potential_spawn_sites(m.x, m.y);
+                if potential_locations.is_empty() {
+                    continue;
+                }
+                let (new_site_x, new_site_y) = potential_locations
+                    .get(rng.gen_range(0, potential_locations.len()))
+                    .unwrap();
+                simulated_forest.plant_sapling(*new_site_x, *new_site_y);
+            }
+            _ => continue,
+        }
+    }
 }
