@@ -28,7 +28,6 @@ struct Woodcutter {
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 struct BearInfo {
     finished_moving: bool,
-    mawed: u32,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -107,7 +106,6 @@ impl BearInfo {
     fn new() -> Self {
         BearInfo {
             finished_moving: false,
-            mawed: 0,
         }
     }
 }
@@ -152,7 +150,7 @@ impl Forest {
             })
             .collect()
     }
-    fn get_lumberjacks(&self) -> Vec<(usize, usize, Woodcutter)> {
+    fn get_moveable_lumberjacks(&self) -> Vec<(usize, usize, Woodcutter)> {
         self.layout
             .iter()
             .enumerate()
@@ -168,7 +166,7 @@ impl Forest {
             .collect()
     }
 
-    fn get_bears(&self) -> Vec<(usize, usize, BearInfo)> {
+    fn get_moveable_bears(&self) -> Vec<(usize, usize, BearInfo)> {
         self.layout
             .iter()
             .enumerate()
@@ -307,41 +305,6 @@ impl Forest {
         old_x: usize,
         old_y: usize,
     ) {
-        let new_loc = self.get(new_x, new_y).unwrap();
-
-        match new_loc {
-            ForestFeature::Empty => {
-                println!("move to empty");
-                self.layout[new_x * self.size + new_y] = ForestFeature::LumberJack(wood);
-            }
-            ForestFeature::Tree(l) => {
-                match l {
-                    FloraVariant::Sapling(a) => {
-                        println!("moved to sap");
-                        self.layout[new_x * self.size + new_y] =
-                            ForestFeature::LumberSeedling(wood, *a);
-                    }
-                    FloraVariant::Tree(_) => {
-                        println!("moved to tree");
-                        self.layout[new_x * self.size + new_y] =
-                            ForestFeature::LumberJack(Woodcutter {
-                                lumber_collected: wood.lumber_collected + 1,
-                                finished_moving: true,
-                            });
-                    }
-                    FloraVariant::Elder(_) => {
-                        println!("moved to elder");
-                        self.layout[new_x * self.size + new_y] =
-                            ForestFeature::LumberJack(Woodcutter {
-                                lumber_collected: wood.lumber_collected + 2,
-                                finished_moving: true,
-                            });
-                    }
-                };
-            }
-            _ => panic!("moved lumber to invalid position"),
-        }
-
         let old_loc = self.get(old_x, old_y).unwrap();
 
         match old_loc {
@@ -357,6 +320,34 @@ impl Forest {
                 old_place, old_x, old_y, new_x, new_y
             ),
         }
+        let new_loc = self.get(new_x, new_y).unwrap();
+
+        match new_loc {
+            ForestFeature::Empty => {
+                self.layout[new_x * self.size + new_y] = ForestFeature::LumberJack(wood);
+            }
+            ForestFeature::Tree(l) => match l {
+                FloraVariant::Sapling(a) => {
+                    self.layout[new_x * self.size + new_y] =
+                        ForestFeature::LumberSeedling(wood, *a);
+                }
+                FloraVariant::Tree(_) => {
+                    self.layout[new_x * self.size + new_y] =
+                        ForestFeature::LumberJack(Woodcutter {
+                            lumber_collected: wood.lumber_collected + 1,
+                            finished_moving: true,
+                        });
+                }
+                FloraVariant::Elder(_) => {
+                    self.layout[new_x * self.size + new_y] =
+                        ForestFeature::LumberJack(Woodcutter {
+                            lumber_collected: wood.lumber_collected + 2,
+                            finished_moving: true,
+                        });
+                }
+            },
+            _ => panic!("moved lumber to invalid position"),
+        }
     }
 
     fn move_bear(
@@ -366,48 +357,7 @@ impl Forest {
         bear: BearInfo,
         old_x: usize,
         old_y: usize,
-    ) {
-        let new_loc = self.get(new_x, new_y).unwrap();
-
-        match new_loc {
-            ForestFeature::Empty => {
-                self.layout[new_x * self.size + new_y] = ForestFeature::Bear(bear);
-            }
-            ForestFeature::Tree(l) => {
-                match l {
-                    FloraVariant::Sapling(a) => {
-                        self.layout[new_x * self.size + new_y] =
-                            ForestFeature::BearTree(bear, FloraVariant::Sapling(*a));
-                    }
-                    FloraVariant::Tree(tree) => {
-                        self.layout[new_x * self.size + new_y] =
-                            ForestFeature::BearTree(bear, FloraVariant::Tree(*tree))
-                    }
-                    FloraVariant::Elder(tree) => {
-                        self.layout[new_x * self.size + new_y] =
-                            ForestFeature::BearTree(bear, FloraVariant::Elder(*tree))
-                    }
-                };
-            }
-            ForestFeature::LumberJack(_) => {
-                self.layout[new_x * self.size + new_y] = ForestFeature::Bear(BearInfo {
-                    finished_moving: true,
-                    mawed: bear.mawed + 1,
-                })
-            }
-            ForestFeature::LumberSeedling(_, sap) => {
-                self.layout[new_x * self.size + new_y] = ForestFeature::BearTree(
-                    BearInfo {
-                        finished_moving: true,
-                        mawed: bear.mawed + 1,
-                    },
-                    FloraVariant::Sapling(*sap),
-                );
-            }
-
-            _ => panic!("moved bear to invalid position"),
-        }
-
+    ) -> Option<Woodcutter> {
         let old_loc = self.get(old_x, old_y).unwrap();
 
         match old_loc {
@@ -423,6 +373,51 @@ impl Forest {
                 "bear disappered {:?} {} {},{},{}",
                 old_place, old_x, old_y, new_x, new_y
             ),
+        }
+
+        let new_loc = self.get(new_x, new_y).unwrap();
+
+        match new_loc {
+            ForestFeature::Empty => {
+                self.layout[new_x * self.size + new_y] = ForestFeature::Bear(bear);
+                None
+            }
+            ForestFeature::Tree(l) => match l {
+                FloraVariant::Sapling(a) => {
+                    self.layout[new_x * self.size + new_y] =
+                        ForestFeature::BearTree(bear, FloraVariant::Sapling(*a));
+                    None
+                }
+                FloraVariant::Tree(tree) => {
+                    self.layout[new_x * self.size + new_y] =
+                        ForestFeature::BearTree(bear, FloraVariant::Tree(*tree));
+                    None
+                }
+                FloraVariant::Elder(tree) => {
+                    self.layout[new_x * self.size + new_y] =
+                        ForestFeature::BearTree(bear, FloraVariant::Elder(*tree));
+                    None
+                }
+            },
+            ForestFeature::LumberJack(l) => {
+                let lumber_copy = *l;
+                self.layout[new_x * self.size + new_y] = ForestFeature::Bear(BearInfo {
+                    finished_moving: true,
+                });
+                Some(lumber_copy)
+            }
+            ForestFeature::LumberSeedling(l, sap) => {
+                let lumber_copy = *l;
+                self.layout[new_x * self.size + new_y] = ForestFeature::BearTree(
+                    BearInfo {
+                        finished_moving: true,
+                    },
+                    FloraVariant::Sapling(*sap),
+                );
+                Some(lumber_copy)
+            }
+
+            _ => panic!("moved bear to invalid position"),
         }
     }
     fn allow_moves(&mut self) {
@@ -478,37 +473,55 @@ fn main() {
     let mut simulated_forest = Forest::new(size);
 
     for year in 1..400 {
+        let mut annual_wood_chop = 0;
+        let mut annual_mualing = 0;
+        let mut annual_sapling_plant = 0;
         for month in 1..12 {
             simulated_forest.age_trees();
 
-            process_spawning(&mut simulated_forest, &mut rng);
+            let saplings_planted_this_month = process_spawning(&mut simulated_forest, &mut rng);
 
-            println!("{}", simulated_forest);
-
+            let mut mauled_lumberjacks = Vec::with_capacity(size * size);
             for move_phase in 0..5 {
                 if move_phase < 3 {
                     process_lumberjacks(&mut simulated_forest, &mut rng);
                 }
-                process_bear(&mut simulated_forest, &mut rng);
+                mauled_lumberjacks.append(&mut process_bear(&mut simulated_forest, &mut rng));
             }
 
             simulated_forest.allow_moves();
 
+            let mauled_lumberjacks_this_month = mauled_lumberjacks.len();
+            let wood_chopped_this_month = mauled_lumberjacks
+                .into_iter()
+                .fold(0, |acc, x| acc + x.lumber_collected)
+                + simulated_forest.amount_of_wood_chopped();
+
+            annual_wood_chop += wood_chopped_this_month;
+            annual_mualing += mauled_lumberjacks_this_month;
+            annual_sapling_plant += saplings_planted_this_month;
+
             println!("{}", simulated_forest);
+            println!(
+                "month {} year {}, {}: units of wood chopped this month {}: lumberJacks mauled {}: saplings planted",
+                month,year,wood_chopped_this_month, mauled_lumberjacks_this_month, saplings_planted_this_month
+            );
             println!("{:-<1$}", "", size * 2);
         }
         println!(
-            "wood chopped this year {}",
-            simulated_forest.amount_of_wood_chopped()
+            "year {}, {}:wood chopped this year {}: lumberJacks mauled {}: saplings planted",
+            year, annual_wood_chop, annual_mualing, annual_sapling_plant
         );
-        println!("{:-<1$}", "", size * 2);
+        println!("{:_<1$}", "", size * 2);
     }
 
     println!("Hello, world!");
 }
 
-fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
+fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
     let mature_tress = simulated_forest.get_mature_trees();
+
+    let mut num_saplings_planted = 0;
 
     for m in mature_tress {
         let gen = rng.gen_range(0, 10);
@@ -522,6 +535,7 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
                     .get(rng.gen_range(0, potential_locations.len()))
                     .unwrap();
                 simulated_forest.plant_sapling(*new_site_x, *new_site_y);
+                num_saplings_planted += 1;
             }
             MatureTree::Elder if gen == 0 || gen == 1 => {
                 let potential_locations = simulated_forest.get_potential_spawn_sites(m.x, m.y);
@@ -532,13 +546,15 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
                     .get(rng.gen_range(0, potential_locations.len()))
                     .unwrap();
                 simulated_forest.plant_sapling(*new_site_x, *new_site_y);
+                num_saplings_planted += 1;
             }
             _ => continue,
         }
     }
+    num_saplings_planted
 }
 fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
-    let lumber_jack_locations = simulated_forest.get_lumberjacks();
+    let lumber_jack_locations = simulated_forest.get_moveable_lumberjacks();
 
     for l in lumber_jack_locations {
         let (old_x, old_y, wood) = l;
@@ -552,8 +568,10 @@ fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
         simulated_forest.move_lumberjack(*new_x, *new_y, wood, old_x, old_y);
     }
 }
-fn process_bear(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
-    let bear_locations = simulated_forest.get_bears();
+fn process_bear(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> Vec<Woodcutter> {
+    let bear_locations = simulated_forest.get_moveable_bears();
+
+    let mut maulings = Vec::with_capacity(bear_locations.len());
 
     for l in bear_locations {
         let (old_x, old_y, bear) = l;
@@ -564,6 +582,8 @@ fn process_bear(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
         let (new_x, new_y) = new_destinations
             .get(rng.gen_range(0, new_destinations.len()))
             .unwrap();
-        simulated_forest.move_bear(*new_x, *new_y, bear, old_x, old_y);
+        let result = simulated_forest.move_bear(*new_x, *new_y, bear, old_x, old_y);
+        maulings.push(result);
     }
+    maulings.into_iter().filter_map(|x| x).collect()
 }
