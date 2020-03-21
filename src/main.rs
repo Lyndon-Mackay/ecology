@@ -721,7 +721,7 @@ fn populate(
     let delta_bears = populate_bears(simulated_forest, rng, maul_incidents);
 
     Census {
-        bear_count: censare.bear_count + delta_bears,
+        bear_count: ((censare.bear_count as i32) + delta_bears) as u32,
         lumberjack_count: (censare.lumberjack_count as i32 + delta_lumber) as u32,
         ..censare
     }
@@ -794,7 +794,7 @@ fn populate_lumberjacks(
     }
     delta_num_lumberjacks
 }
-fn populate_bears(simulated_forest: &mut Forest, rng: &mut ThreadRng, maul_incidents: u32) -> u32 {
+fn populate_bears(simulated_forest: &mut Forest, rng: &mut ThreadRng, maul_incidents: u32) -> i32 {
     match maul_incidents.cmp(&0) {
         Ordering::Equal | Ordering::Less => {
             let spawnable_criteria = |x| match x {
@@ -833,7 +833,7 @@ fn populate_bears(simulated_forest: &mut Forest, rng: &mut ThreadRng, maul_incid
             };
 
             simulated_forest.transform_feature(&[culled_bear], remove_bear_transform);
-            0
+            -1
         }
     }
 }
