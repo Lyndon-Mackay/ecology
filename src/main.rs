@@ -233,12 +233,12 @@ impl Forest {
     ///
     fn get_locations_with_info<T>(
         &self,
-        criteria: fn(&ForestFeature) -> Option<T>,
+        criteria: fn(ForestFeature) -> Option<T>,
     ) -> Vec<FeatureLocation<T>> {
         self.layout
             .iter()
             .enumerate()
-            .filter_map(|(i, x)| match criteria(x) {
+            .filter_map(|(i, x)| match criteria(*x) {
                 Some(loc) => {
                     let (x, y) = self.get_x_y(i);
                     Some(FeatureLocation { x, y, feature: loc })
@@ -309,11 +309,11 @@ impl Forest {
     }
 
     ///
-    /// changes a forest feature into another
+    /// changes a forest feature into another by slice of locations
     /// forest feature transformation is specified by
     /// closure
     ///
-    fn transform_feature(
+    fn transform_features(
         &mut self,
         new_locations: &[(usize, usize)],
         transformation: fn(ForestFeature) -> ForestFeature,
@@ -325,6 +325,19 @@ impl Forest {
         }
     }
     ///
+    /// changes a forest feature into another
+    /// forest feature transformation is specified by
+    /// closure
+    ///
+    fn transform_feature(
+        &mut self,
+        new_locations: (usize, usize),
+        transformation: fn(ForestFeature) -> ForestFeature,
+    ) {
+        let (new_x, new_y) = new_locations;
+        let new_loc = self.get(new_x, new_y);
+        self.assign_at(new_x, new_y, transformation(new_loc));
+    }
     /// Used to simulate movement in a forest
     /// take a FeatureLocation that stores stuff
     /// about the moving feature plus its location
@@ -482,7 +495,7 @@ fn main() {
 }
 
 fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
-    let mature_tress_criteria = |x: &ForestFeature| match x {
+    let mature_tress_criteria = |x| match x {
         ForestFeature::Tree(t) => match t {
             FloraVariant::Tree(_) => Some(MatureTree::Tree),
             FloraVariant::Elder(_) => Some(MatureTree::Elder),
@@ -521,7 +534,7 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
                 let (new_site_x, new_site_y) = potential_locations
                     .get(rng.gen_range(0, potential_locations.len()))
                     .unwrap();
-                simulated_forest.transform_feature(&[(*new_site_x, *new_site_y)], spawn_seedling);
+                simulated_forest.transform_feature((*new_site_x, *new_site_y), spawn_seedling);
                 num_saplings_planted += 1;
             }
             MatureTree::Elder if gen == 0 || gen == 1 => {
@@ -536,7 +549,7 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
                 let (new_site_x, new_site_y) = potential_locations
                     .get(rng.gen_range(0, potential_locations.len()))
                     .unwrap();
-                simulated_forest.transform_feature(&[(*new_site_x, *new_site_y)], spawn_seedling);
+                simulated_forest.transform_feature((*new_site_x, *new_site_y), spawn_seedling);
                 num_saplings_planted += 1;
             }
             _ => continue,
@@ -545,7 +558,7 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
     num_saplings_planted
 }
 fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
-    let movable_lumberjack_criteria = |x: &ForestFeature| match *x {
+    let movable_lumberjack_criteria = |x| match x {
         ForestFeature::LumberJack(l) if !l.finished_moving => Some(l),
         ForestFeature::LumberSeedling(l, _) if !l.finished_moving => Some(l),
         _ => None,
@@ -612,7 +625,7 @@ fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
     }
 }
 fn process_bear(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> Vec<Woodcutter> {
-    let movable_criteria = |x: &ForestFeature| match *x {
+    let movable_criteria = |x| match x {
         ForestFeature::Bear(b) if !b.finished_moving => Some(b),
         ForestFeature::BearTree(b, _) if !b.finished_moving => Some(b),
         _ => None,
@@ -770,7 +783,7 @@ fn populate_lumberjacks(
                 },
                 _ => panic!("spawning lumberJack invalid location"),
             };
-            simulated_forest.transform_feature(&lumber_spawn_sites, spawnable_transformation);
+            simulated_forest.transform_features(&lumber_spawn_sites, spawnable_transformation);
         }
         Ordering::Less => {
             let criteria = |x| match x {
@@ -789,7 +802,7 @@ fn populate_lumberjacks(
                 _ => panic!("spawning lumberJack invalid location"),
             };
 
-            simulated_forest.transform_feature(&[culled_lumber_jack], remove_lumber_transform);
+            simulated_forest.transform_feature(culled_lumber_jack, remove_lumber_transform);
         }
     }
     delta_num_lumberjacks
@@ -814,7 +827,7 @@ fn populate_bears(simulated_forest: &mut Forest, rng: &mut ThreadRng, maul_incid
                 _ => panic!("spawning lumberJack invalid location"),
             };
 
-            simulated_forest.transform_feature(&[new_bear_location], spawnable_transformation);
+            simulated_forest.transform_feature(new_bear_location, spawnable_transformation);
             1
         }
         Ordering::Greater => {
@@ -832,7 +845,7 @@ fn populate_bears(simulated_forest: &mut Forest, rng: &mut ThreadRng, maul_incid
                 _ => panic!("spawning lumberJack invalid location"),
             };
 
-            simulated_forest.transform_feature(&[culled_bear], remove_bear_transform);
+            simulated_forest.transform_feature(culled_bear, remove_bear_transform);
             -1
         }
     }
