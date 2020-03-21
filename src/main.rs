@@ -58,12 +58,14 @@ struct Census {
     lumberjack_count: u32,
 }
 
-pub trait Growing<T> {
-    fn age(&self) -> T;
+pub trait Growing {
+    type Item;
+    fn age(&self) -> Self::Item;
 }
 
-impl Growing<FloraVariant> for FloraVariant {
-    fn age(&self) -> FloraVariant {
+impl Growing for FloraVariant {
+    type Item = FloraVariant;
+    fn age(&self) -> Self::Item {
         match *self {
             FloraVariant::Sapling(seed) if seed.current_age < 12 => {
                 FloraVariant::Sapling(Seedling {
@@ -77,8 +79,9 @@ impl Growing<FloraVariant> for FloraVariant {
         }
     }
 }
-impl Growing<ForestFeature> for ForestFeature {
-    fn age(&self) -> ForestFeature {
+impl Growing for ForestFeature {
+    type Item = ForestFeature;
+    fn age(&self) -> Self::Item {
         match self {
             ForestFeature::Tree(tre_detail) => ForestFeature::Tree(tre_detail.age()),
             ForestFeature::LumberSeedling(wood_cut, seed) => ForestFeature::LumberSeedling(
