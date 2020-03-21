@@ -339,7 +339,7 @@ impl fmt::Display for Census {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         writeln!(
             f,
-            "Trees:{} Bears:{} Lumberjacks:{}",
+            "Trees:{}, Bears:{}, Lumberjacks:{}",
             self.tree_count, self.bear_count, self.lumberjack_count
         )?;
 
@@ -389,7 +389,7 @@ fn main() {
             simulated_forest.reset_moveable_state();
             println!("{}", simulated_forest);
             println!(
-                "month {} year {}, {}: units of wood chopped this month {}: lumberJacks mauled {}: saplings planted",
+                "month {} year {}, units of wood chopped this month: {},  lumberjacks_malued: {}, saplings planted: {},",
                 month,year,wood_chopped_this_month, mauled_lumberjacks_this_month, saplings_planted_this_month
             );
             println!("{:-<1$}", "", size * 2);
