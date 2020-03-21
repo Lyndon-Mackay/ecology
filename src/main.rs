@@ -45,7 +45,9 @@ enum MatureTree {
     Tree,
     Elder,
 }
-
+/// stores information and location about
+/// a feature substruce
+///
 struct FeatureLocation<T> {
     feature: T,
     x: usize,
@@ -58,6 +60,16 @@ struct Census {
     lumberjack_count: u32,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Forest {
+    layout: Vec<ForestFeature>,
+    size: usize,
+}
+
+///
+/// Used for things that have a concept of age in this sinulation
+/// This allows the being to age itself
+///
 pub trait Growing {
     type Item;
     fn age(&self) -> Self::Item;
@@ -98,12 +110,6 @@ impl Growing for ForestFeature {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Forest {
-    layout: Vec<ForestFeature>,
-    size: usize,
-}
-
 impl Woodcutter {
     fn new() -> Self {
         Woodcutter {
@@ -121,6 +127,11 @@ impl BearInfo {
 }
 
 impl Forest {
+    ///
+    /// Generates a forest of specified size
+    /// the height and width are always the same
+    /// size
+    ///
     fn new(size: usize) -> Self {
         let mut rng = rand::thread_rng();
         Forest {
@@ -135,15 +146,30 @@ impl Forest {
             size,
         }
     }
+    ///
+    /// takes an x and y cordiante gives a copy the resulting forestfeature
     fn get(&self, x: usize, y: usize) -> ForestFeature {
         self.layout[x * self.size + y]
     }
+    ///
+    /// Converts an absoluute location into
+    /// the projected x,y cordinate
     fn get_x_y(&self, i: usize) -> (usize, usize) {
         (i / self.size, i % self.size)
     }
+    ///
+    /// Takes an x,y coridnate and a feature to assign then
+    /// overwrites the location with the new feature
+    ///
     fn assign_at(&mut self, x: usize, y: usize, f: ForestFeature) {
         self.layout[x * self.size + y] = f;
     }
+    ///
+    /// Returns a census struct that
+    /// has the populations of all
+    /// the forestfeatures
+    ///
+    ///
     fn get_terrain_counts(&self) -> Census {
         self.layout.iter().fold(
             Census {
@@ -180,6 +206,11 @@ impl Forest {
             },
         )
     }
+    ///
+    /// Takes a closure that filters for ceratin Foresfeature types
+    /// applies the closure to every Forestfeature and
+    /// returns a vector of all valid locations as tuple (x,y)
+    ///
     fn get_locations(&self, criteria: fn(ForestFeature) -> bool) -> Vec<(usize, usize)> {
         self.layout
             .iter()
@@ -193,6 +224,13 @@ impl Forest {
             })
             .collect()
     }
+    ///
+    /// Takes a closure that filters for ceratin Foresfeature types
+    /// with an option return value<T>
+    /// applies the closure to every Forestfeature and
+    /// returns a vector of all valid locations as vector of Feature locations<T>
+    ///
+    ///
     fn get_locations_with_info<T>(
         &self,
         criteria: fn(&ForestFeature) -> Option<T>,
@@ -210,9 +248,15 @@ impl Forest {
             .collect()
     }
 
-    fn age_trees(&mut self) {
+    ///
+    /// Calls the aging implementation on all
+    /// forestfeatures in the forest
+    ///
+    fn age_features(&mut self) {
         self.layout = self.layout.iter().map(|x| x.age()).collect();
     }
+
+    /// sums the amount of wood chopped by the lumber jacks
     fn amount_of_wood_chopped(&self) -> u32 {
         self.layout
             .iter()
@@ -223,7 +267,14 @@ impl Forest {
             })
             .sum()
     }
-    fn get_interactable_neighbours(
+    ///
+    /// gets a vector of interactable neighbours locations
+    /// interactable is specified by closure.
+    ///
+    /// Examples of interactable are neighbours to move to or
+    /// plant to
+    ///
+    fn get_interactable_neighbours_locations(
         &self,
         x: usize,
         y: usize,
@@ -257,18 +308,30 @@ impl Forest {
         returned_vec
     }
 
+    ///
+    /// changes a forest feature into another
+    /// forest feature transformation is specified by
+    /// closure
+    ///
     fn transform_feature(
         &mut self,
         new_locations: &[(usize, usize)],
-        spawnable_transformation: fn(ForestFeature) -> ForestFeature,
+        transformation: fn(ForestFeature) -> ForestFeature,
     ) {
         for position in new_locations {
             let (new_x, new_y) = position;
             let new_loc = self.get(*new_x, *new_y);
-            self.assign_at(*new_x, *new_y, spawnable_transformation(new_loc));
+            self.assign_at(*new_x, *new_y, transformation(new_loc));
         }
     }
-
+    ///
+    /// Used to simulate movement in a forest
+    /// take a FeatureLocation that stores stuff
+    /// about the moving feature plus its location
+    /// coridnates to new location
+    /// and too closures to simulate movement one changes the orign
+    /// the other the destionation T is any statistical information that the destination closure may return
+    ///
     fn move_to<T, U>(
         &mut self,
         migrator: FeatureLocation<U>,
@@ -291,7 +354,11 @@ impl Forest {
         resul
     }
 
-    fn reset_moveable_state(&mut self) {
+    ///
+    /// Changes the features to be initial state
+    /// this will reset movement and lumber statistics
+    ///
+    fn reset_feature_state(&mut self) {
         for x in self.layout.iter_mut() {
             match x {
                 ForestFeature::Bear(b) => b.finished_moving = false,
@@ -366,7 +433,7 @@ fn main() {
         let mut annual_mualing = 0;
         let mut annual_sapling_plant = 0;
         for month in 1..12 {
-            simulated_forest.age_trees();
+            simulated_forest.age_features();
 
             let saplings_planted_this_month = process_spawning(&mut simulated_forest, &mut rng);
 
@@ -386,7 +453,7 @@ fn main() {
             annual_wood_chop += wood_chopped_this_month;
             annual_mualing += mauled_lumberjacks_this_month as u32;
             annual_sapling_plant += saplings_planted_this_month;
-            simulated_forest.reset_moveable_state();
+            simulated_forest.reset_feature_state();
             println!("{}", simulated_forest);
             println!(
                 "month {} year {}, units of wood chopped this month: {},  lumberjacks_malued: {}, saplings planted: {},",
@@ -443,8 +510,11 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
         let gen = rng.gen_range(0, 10);
         match m.feature {
             MatureTree::Tree if gen == 0 => {
-                let potential_locations =
-                    simulated_forest.get_interactable_neighbours(m.x, m.y, plantable_criteria);
+                let potential_locations = simulated_forest.get_interactable_neighbours_locations(
+                    m.x,
+                    m.y,
+                    plantable_criteria,
+                );
                 if potential_locations.is_empty() {
                     continue;
                 }
@@ -455,8 +525,11 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
                 num_saplings_planted += 1;
             }
             MatureTree::Elder if gen == 0 || gen == 1 => {
-                let potential_locations =
-                    simulated_forest.get_interactable_neighbours(m.x, m.y, plantable_criteria);
+                let potential_locations = simulated_forest.get_interactable_neighbours_locations(
+                    m.x,
+                    m.y,
+                    plantable_criteria,
+                );
                 if potential_locations.is_empty() {
                     continue;
                 }
@@ -489,7 +562,7 @@ fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
     };
 
     for current_lumberjack in lumber_jack_locations {
-        let new_destinations = simulated_forest.get_interactable_neighbours(
+        let new_destinations = simulated_forest.get_interactable_neighbours_locations(
             current_lumberjack.x,
             current_lumberjack.y,
             loacation_criteria,
@@ -558,8 +631,11 @@ fn process_bear(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> Vec<Woodc
     };
 
     for current_bear in bear_locations {
-        let new_destinations =
-            simulated_forest.get_interactable_neighbours(current_bear.x, current_bear.y, criteria);
+        let new_destinations = simulated_forest.get_interactable_neighbours_locations(
+            current_bear.x,
+            current_bear.y,
+            criteria,
+        );
         if new_destinations.is_empty() {
             continue;
         }
