@@ -338,6 +338,7 @@ impl Forest {
         let new_loc = self.get(new_x, new_y);
         self.assign_at(new_x, new_y, transformation(new_loc));
     }
+    ///
     /// Used to simulate movement in a forest
     /// take a FeatureLocation that stores stuff
     /// about the moving feature plus its location
@@ -353,15 +354,11 @@ impl Forest {
         move_to: fn(ForestFeature, U) -> (ForestFeature, T),
     ) -> T {
         let old_loc = self.get(migrator.x, migrator.y);
-
         self.assign_at(migrator.x, migrator.y, move_form(old_loc));
 
         let (new_x, new_y) = new_loc;
-
         let new_loc = self.get(new_x, new_y);
-
         let (new_feature, resul) = move_to(new_loc, migrator.feature);
-
         self.assign_at(new_x, new_y, new_feature);
 
         resul
@@ -441,6 +438,7 @@ fn main() {
 
     let mut simulated_forest = Forest::new(size);
 
+    /* The main simulation */
     for year in 1..400 {
         let mut annual_wood_chop = 0;
         let mut annual_mualing = 0;
@@ -451,6 +449,8 @@ fn main() {
             let saplings_planted_this_month = process_spawning(&mut simulated_forest, &mut rng);
 
             let mut mauled_lumberjacks = Vec::with_capacity(size * size);
+
+            /* Movement of lumebrjacks and bear */
             for move_phase in 0..5 {
                 if move_phase < 3 {
                     process_lumberjacks(&mut simulated_forest, &mut rng);
@@ -463,10 +463,15 @@ fn main() {
                 .into_iter()
                 .fold(0, |acc, x| acc + x.lumber_collected)
                 + simulated_forest.amount_of_wood_chopped();
+
             annual_wood_chop += wood_chopped_this_month;
             annual_mualing += mauled_lumberjacks_this_month as u32;
             annual_sapling_plant += saplings_planted_this_month;
+
+            /* reset statistics and movment */
             simulated_forest.reset_feature_state();
+
+            /* End of month printing */
             println!("{}", simulated_forest);
             println!(
                 "month {} year {}, units of wood chopped this month: {},  lumberjacks_malued: {}, saplings planted: {},",
@@ -474,12 +479,14 @@ fn main() {
             );
             println!("{:-<1$}", "", size * 2);
         }
+        /* Enf of year printing and statsitics */
         let censare = populate(
             &mut simulated_forest,
             &mut rng,
             annual_wood_chop,
             annual_mualing,
         );
+
         println!("yearly census {}", censare);
         println!(
             "year {}, wood chopped this year:{} ,lumberJacks mauled:{} ,saplings planted:{} ",
@@ -487,14 +494,19 @@ fn main() {
         );
         println!("{:_<1$}", "", size * 2);
 
+        /* Terminate no forest to simulate */
         if censare.tree_count == 0 {
             println!("The once great forest has disappeared");
             std::process::exit(0);
         }
     }
 }
-
+///
+/// Process the spawning logic of tress
+/// this will plant new saplings
+///
 fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
+    /* Describe what mature tress are to the forest */
     let mature_tress_criteria = |x| match x {
         ForestFeature::Tree(t) => match t {
             FloraVariant::Tree(_) => Some(MatureTree::Tree),
@@ -512,6 +524,7 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
         ForestFeature::Empty => true,
         _ => false,
     };
+
     let spawn_seedling = |new_loc| {
         if let ForestFeature::Empty = new_loc {
             ForestFeature::Tree(FloraVariant::Sapling(Seedling { current_age: 0 }))
@@ -519,7 +532,10 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
             panic!("planting in a non empty zone {:?}", new_loc);
         }
     };
+
+    /* main planting proceess happens here */
     for m in mature_tress {
+        /* Random chance of planting */
         let gen = rng.gen_range(0, 10);
         match m.feature {
             MatureTree::Tree if gen == 0 => {
@@ -543,9 +559,11 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
                     m.y,
                     plantable_criteria,
                 );
+
                 if potential_locations.is_empty() {
                     continue;
                 }
+
                 let (new_site_x, new_site_y) = potential_locations
                     .get(rng.gen_range(0, potential_locations.len()))
                     .unwrap();
@@ -557,6 +575,7 @@ fn process_spawning(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> u32 {
     }
     num_saplings_planted
 }
+/// Movement of lumberjacks handled here
 fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
     let movable_lumberjack_criteria = |x| match x {
         ForestFeature::LumberJack(l) if !l.finished_moving => Some(l),
@@ -580,9 +599,11 @@ fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
             current_lumberjack.y,
             loacation_criteria,
         );
+
         if new_destinations.is_empty() {
             continue;
         }
+
         let (new_x, new_y) = new_destinations
             .get(rng.gen_range(0, new_destinations.len()))
             .unwrap();
@@ -624,6 +645,7 @@ fn process_lumberjacks(simulated_forest: &mut Forest, rng: &mut ThreadRng) {
         );
     }
 }
+///Movement of bears
 fn process_bear(simulated_forest: &mut Forest, rng: &mut ThreadRng) -> Vec<Woodcutter> {
     let movable_criteria = |x| match x {
         ForestFeature::Bear(b) if !b.finished_moving => Some(b),
@@ -734,7 +756,7 @@ fn populate(
     let delta_bears = populate_bears(simulated_forest, rng, maul_incidents);
 
     Census {
-        bear_count: ((censare.bear_count as i32) + delta_bears) as u32,
+        bear_count: (censare.bear_count as i32 + delta_bears) as u32,
         lumberjack_count: (censare.lumberjack_count as i32 + delta_lumber) as u32,
         ..censare
     }
@@ -746,6 +768,7 @@ fn populate_lumberjacks(
     wood_collected: u32,
     lumberjack_count: u32,
 ) -> i32 {
+    /*Calculate lumber jack changes*/
     let delta_num_lumberjacks = if lumberjack_count == 0 {
         1
     } else if lumberjack_count > wood_collected {
@@ -770,11 +793,14 @@ fn populate_lumberjacks(
 
             let mut lumber_spawn_sites = Vec::with_capacity(delta_num_lumberjacks as usize);
 
+            /* Collect randomly chosen spawn sites */
             for _x in 0..delta_num_lumberjacks {
                 let new_lumber_location =
                     empty_locations.remove(rng.gen_range(0, empty_locations.len()));
                 lumber_spawn_sites.push(new_lumber_location);
             }
+
+            /*Instruct the forest on how to spawn the new lumberjacks*/
             let spawnable_transformation = |new_loc| match new_loc {
                 ForestFeature::Empty => ForestFeature::LumberJack(Woodcutter::new()),
                 ForestFeature::Tree(l) => match l {
@@ -791,9 +817,11 @@ fn populate_lumberjacks(
                 ForestFeature::LumberSeedling(_, _) => true,
                 _ => false,
             };
+
             let mut cullable_lumberjacks = simulated_forest.get_locations(criteria);
             let culled_lumber_jack =
                 cullable_lumberjacks.remove(rng.gen_range(0, cullable_lumberjacks.len()));
+
             let remove_lumber_transform = |new_loc| match new_loc {
                 ForestFeature::LumberJack(_) => ForestFeature::Empty,
                 ForestFeature::LumberSeedling(_, s) => {
@@ -810,6 +838,7 @@ fn populate_lumberjacks(
 fn populate_bears(simulated_forest: &mut Forest, rng: &mut ThreadRng, maul_incidents: u32) -> i32 {
     match maul_incidents.cmp(&0) {
         Ordering::Equal | Ordering::Less => {
+            /*where bears can spawn*/
             let spawnable_criteria = |x| match x {
                 ForestFeature::Empty => true,
                 ForestFeature::Tree(_) => true,
@@ -821,6 +850,7 @@ fn populate_bears(simulated_forest: &mut Forest, rng: &mut ThreadRng, maul_incid
             let new_bear_location =
                 bear_spawn_spots.remove(rng.gen_range(0, bear_spawn_spots.len()));
 
+            /*Instructions on how to spawn bears*/
             let spawnable_transformation = |new_loc| match new_loc {
                 ForestFeature::Empty => ForestFeature::Bear(BearInfo::new()),
                 ForestFeature::Tree(l) => ForestFeature::BearTree(BearInfo::new(), l),
