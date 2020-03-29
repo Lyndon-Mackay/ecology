@@ -1,4 +1,5 @@
 use ecology::simulate;
+
 use std::env;
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -9,5 +10,6 @@ fn main() {
     let size = &args[1];
 
     let size = size.parse().expect("positive number expected");
+    // simulate(size);
     simulate(size);
 }
