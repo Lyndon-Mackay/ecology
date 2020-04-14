@@ -47,6 +47,7 @@ impl Forest {
 	pub fn assign_at(&mut self, x: usize, y: usize, f: ForestFeature) {
 		self.layout[x * self.size + y] = f;
 	}
+
 	///
 	/// Returns a census struct that
 	/// has the populations of all
@@ -89,6 +90,7 @@ impl Forest {
 			},
 		)
 	}
+
 	///
 	/// Takes a closure that filters for ceratin Foresfeature types
 	/// applies the closure to every Forestfeature and
@@ -311,7 +313,7 @@ pub mod actions {
 			let mut annual_wood_chop = 0;
 			let mut annual_mualing = 0;
 			let mut annual_sapling_plant = 0;
-			for month in 1..12 {
+			for month in 1..=12 {
 				simulated_forest.age_features();
 				let saplings_planted_this_month = process_spawning(&mut simulated_forest, &mut rng);
 				let mut mauled_lumberjacks = Vec::with_capacity(size * size);
