@@ -32,7 +32,7 @@ pub enum ForestFeature {
 	LumberSeedling(Woodcutter, Seedling),
 	BearTree(BearInfo, FloraVariant),
 }
-
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MatureTree {
 	Tree,
 	Elder,
@@ -106,6 +106,11 @@ impl Woodcutter {
 }
 impl BearInfo {
 	pub fn new() -> Self {
+		BearInfo {
+			finished_moving: false,
+		}
+	}
+	pub fn moved() -> Self {
 		BearInfo {
 			finished_moving: false,
 		}
