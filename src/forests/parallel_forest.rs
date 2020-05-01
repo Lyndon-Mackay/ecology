@@ -294,12 +294,14 @@ pub mod actions {
     use std::collections::HashMap;
     use std::collections::HashSet;
 
-    struct Hashes<'a> {
-        trees: &'a HashSet<usize>,
-        before_lumbers: &'a HashSet<usize>,
-        lumbers: &'a HashMap<usize, Woodcutter>,
-        before_bears: &'a HashSet<usize>,
-        bears: &'a HashMap<usize, BearInfo>,
+    use std::{sync::mpsc::sync_channel, sync::Arc, thread};
+
+    struct Hashes {
+        trees: HashSet<usize>,
+        before_lumbers: HashSet<usize>,
+        lumbers: HashMap<usize, Woodcutter>,
+        before_bears: HashSet<usize>,
+        bears: HashMap<usize, BearInfo>,
     }
 
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -316,6 +318,9 @@ pub mod actions {
         lumberjacks_mauled: u32,
     }
 
+    ///
+    /// Parallel simulation
+    ///
     pub fn simulate(size: usize) {
         let mut rng = rand::thread_rng();
         let mut simulated_forest = Forest::new(size);
@@ -351,9 +356,9 @@ pub mod actions {
 
                 println!("{}", simulated_forest);
                 println!(
-					"month {} year {}, units of wood chopped this month: {},  lumberjacks_malued: {}, saplings planted: {},",
-					month,year,monthly_changes.wood_cut, monthly_changes.lumberjacks_mauled, monthly_changes.saplings_planted
-				);
+                    "month {} year {}, units of wood chopped this month: {},  lumberjacks_malued: {}, saplings planted: {},",
+                    month,year,monthly_changes.wood_cut, monthly_changes.lumberjacks_mauled, monthly_changes.saplings_planted
+                );
                 println!("{:-<1$}", "", size * 2);
 
                 annual_wood_chop += monthly_changes.wood_cut;
@@ -378,28 +383,7 @@ pub mod actions {
     }
 
     fn process_terrain(simulated_forest: &mut Forest, move_phase: u32) -> Event {
-        /* TODO check for persistent rng between thread  save reinitiliastion (not sure how expensive it is*/
-        let seeds = if move_phase == 0 {
-            process_spawning(simulated_forest, &mut rand::thread_rng())
-        } else {
-            HashSet::new()
-        };
-
-        let (before_lumbers, after_lumbers) = if move_phase < 3 {
-            process_lumberjacks(simulated_forest, &mut rand::thread_rng())
-        } else {
-            (HashSet::new(), HashMap::new())
-        };
-
-        let (before_bears, after_bears) = process_bear(simulated_forest, &mut rand::thread_rng());
-
-        let changes = Hashes {
-            trees: &seeds,
-            before_lumbers: &before_lumbers,
-            lumbers: &after_lumbers,
-            before_bears: &before_bears,
-            bears: &after_bears,
-        };
+        let changes = collect_movements(&simulated_forest, move_phase);
 
         let moved_from_actions = |old_loc, i, movements: &Hashes| match old_loc {
             ForestFeature::LumberJack(l) => {
@@ -633,6 +617,62 @@ pub mod actions {
                     lumberjacks_mauled: a.lumberjacks_mauled + b.lumberjacks_mauled,
                 },
             )
+    }
+
+    fn collect_movements(simulated_forest: &Forest, move_phase: u32) -> Hashes {
+        let (tree_transmitter, tree_receiver) = sync_channel(1);
+        let (lumber_transmitter, lumber_receiver) = sync_channel(1);
+        let (bear_transmiter, bear_receiver) = sync_channel(1);
+
+        let shared_forest = Arc::new(simulated_forest.to_owned());
+
+        let tree_forest = Arc::clone(&shared_forest);
+        thread::spawn(move || {
+            let tree_transmitter = tree_transmitter;
+            tree_transmitter
+                .send(if move_phase == 0 {
+                    process_spawning(&tree_forest, &mut rand::thread_rng())
+                } else {
+                    HashSet::new()
+                })
+                .unwrap();
+        });
+
+        let lumber_forest = Arc::clone(&shared_forest);
+        thread::spawn(move || {
+            let lumber_transmitter = lumber_transmitter;
+            lumber_transmitter
+                .send(if move_phase < 3 {
+                    process_lumberjacks(&lumber_forest, &mut rand::thread_rng())
+                } else {
+                    (HashSet::new(), HashMap::new())
+                })
+                .unwrap();
+        });
+
+        let bear_forest = Arc::clone(&shared_forest);
+
+        thread::spawn(move || {
+            let bear_transmiter = bear_transmiter;
+            bear_transmiter
+                .send(process_bear(&bear_forest, &mut rand::thread_rng()))
+                .unwrap();
+        });
+
+        //let (before_bears, after_bears) = process_bear(simulated_forest, &mut rand::thread_rng());
+
+        let seeds = tree_receiver.recv().unwrap();
+        let (before_lumbers, after_lumbers) = lumber_receiver.recv().unwrap();
+
+        let (before_bears, after_bears) = bear_receiver.recv().unwrap();
+
+        Hashes {
+            trees: seeds,
+            before_lumbers,
+            lumbers: after_lumbers,
+            before_bears,
+            bears: after_bears,
+        }
     }
 
     fn process_spawning(simulated_forest: &Forest, rng: &mut ThreadRng) -> HashSet<usize> {
