@@ -8,9 +8,11 @@
 			"type": "lldb",
 			"request": "launch",
 			"name": "Debug",
-            "program": "${workspaceRoot}/target/debug/ecology",
-            "args": ["10"],
-			"cwd": "${workspaceFolder}"
+            "program": "${workspaceRoot}/target/debug/main",
+			"cwd": "${workspaceFolder}",
+			"args": ["100"],
+			"terminal": "integrated"
+			
 		}
 	]
 }

@@ -294,7 +294,15 @@ pub mod actions {
     use std::collections::HashMap;
     use std::collections::HashSet;
 
-    use std::{sync::mpsc::sync_channel, sync::Arc, thread};
+    use std::{
+        sync::Arc,
+        sync::{
+            mpsc::{channel, Sender},
+            Mutex,
+        },
+    };
+
+    use threadpool::ThreadPool;
 
     struct Hashes {
         trees: HashSet<usize>,
@@ -321,9 +329,15 @@ pub mod actions {
     ///
     /// Parallel simulation
     ///
-    pub fn simulate(size: usize) {
+    pub fn simulate(size: usize, logging_channel: Sender<String>) {
         let mut rng = rand::thread_rng();
         let mut simulated_forest = Forest::new(size);
+
+        let forest_pool = ThreadPool::new(3);
+
+        let logging_pool = ThreadPool::new(6);
+
+        let sync_time = Arc::new(Mutex::new((1, 1)));
 
         /* The main simulation */
         for year in 1..400 {
@@ -336,7 +350,7 @@ pub mod actions {
                 let mut monthly_changes = Vec::with_capacity(5);
 
                 for move_phase in 0..5 {
-                    monthly_changes.push(process_terrain(&mut simulated_forest, move_phase));
+                    monthly_changes.push(process_terrain(&mut simulated_forest, move_phase, &forest_pool));
                 }
 
                 simulated_forest.reset_feature_state();
@@ -354,12 +368,48 @@ pub mod actions {
                     },
                 );
 
-                println!("{}", simulated_forest);
-                println!(
-                    "month {} year {}, units of wood chopped this month: {},  lumberjacks_malued: {}, saplings planted: {},",
-                    month,year,monthly_changes.wood_cut, monthly_changes.lumberjacks_mauled, monthly_changes.saplings_planted
-                );
-                println!("{:-<1$}", "", size * 2);
+                let monthly_log = logging_channel.clone();
+
+                let forest_string = simulated_forest.to_string();
+
+                let current_sync = sync_time.clone();
+
+                logging_pool.execute(move || {
+
+                    loop {
+                        //println!("month mutex request");
+                        let mut sync =  match current_sync.lock() {
+                            Ok(a) => a,
+                            e => {print!("{:?}",e); std::process::exit(0);} ,
+                        };
+                        let (sync_year,mut sync_month) = *sync;
+
+                        if  sync_year == year && sync_month == month  {
+                            monthly_log.send(forest_string).unwrap();
+                            monthly_log.send(format!(
+                                "month {} year {}, units of wood chopped this month: {},  lumberjacks_malued: {}, saplings planted: {},",
+                                month,year,monthly_changes.wood_cut, monthly_changes.lumberjacks_mauled, monthly_changes.saplings_planted)
+        
+                            ).unwrap();
+        
+                            monthly_log.send(format!("{:-<1$}", "", size * 2)).unwrap();
+
+                            //if 0 then  print the yearlog
+                            sync_month = (sync_month + 1) %13;
+
+                            //println!("{}",sync_month);
+
+
+                            *sync = (sync_year,sync_month);
+
+                           // println!("sending month");
+
+                            return
+                        }
+
+                   
+                }
+                });
 
                 annual_wood_chop += monthly_changes.wood_cut;
                 annual_mualing += monthly_changes.lumberjacks_mauled;
@@ -373,17 +423,44 @@ pub mod actions {
                 annual_mualing,
             );
 
-            println!("yearly census {}", censare);
-            println!(
-                "year {}, wood chopped this year:{} ,lumberJacks mauled:{} ,saplings planted:{} ",
-                year, annual_wood_chop, annual_mualing, annual_sapling_plant
-            );
-            println!("{:_<1$}", "", size * 2);
+            let current_sync = sync_time.clone();
+            let yearly_log = logging_channel.clone();
+            logging_pool.execute( 
+                move|| loop {
+                    let mut sync =  current_sync.lock().unwrap();
+                    let ( mut sync_year,mut sync_month) = *sync;
+                   // println!("year mutex request {}, {}, {}",year,sync_year,sync_month);
+
+                    if  sync_year == year && sync_month == 0  {
+
+                        yearly_log.send(format!("yearly census {}", censare)).unwrap();
+
+                        yearly_log.send(format!(
+                            "year {}, wood chopped this year:{} ,lumberJacks mauled:{} ,saplings planted:{} ",
+                            year, annual_wood_chop, annual_mualing, annual_sapling_plant
+                        )).unwrap();
+
+                        yearly_log.send(format!("{:_<1$}", "", size * 2)).unwrap();
+
+                       sync_month = 1;
+
+                       sync_year += 1;
+
+                        *sync = (sync_year,sync_month);
+
+                        //println!("sending year");
+                        return;
+
+                    }
+                }
+
+            )
+
         }
     }
 
-    fn process_terrain(simulated_forest: &mut Forest, move_phase: u32) -> Event {
-        let changes = collect_movements(&simulated_forest, move_phase);
+    fn process_terrain(simulated_forest: &mut Forest, move_phase: u32, pool: &ThreadPool) -> Event {
+        let changes = collect_movements(&simulated_forest, move_phase, pool);
 
         let moved_from_actions = |old_loc, i, movements: &Hashes| match old_loc {
             ForestFeature::LumberJack(l) => {
@@ -619,15 +696,15 @@ pub mod actions {
             )
     }
 
-    fn collect_movements(simulated_forest: &Forest, move_phase: u32) -> Hashes {
-        let (tree_transmitter, tree_receiver) = sync_channel(1);
-        let (lumber_transmitter, lumber_receiver) = sync_channel(1);
-        let (bear_transmiter, bear_receiver) = sync_channel(1);
+    fn collect_movements(simulated_forest: &Forest, move_phase: u32, pool: &ThreadPool) -> Hashes {
+        let (tree_transmitter, tree_receiver) = channel();
+        let (lumber_transmitter, lumber_receiver) = channel();
+        let (bear_transmiter, bear_receiver) = channel();
 
         let shared_forest = Arc::new(simulated_forest.to_owned());
 
         let tree_forest = Arc::clone(&shared_forest);
-        thread::spawn(move || {
+        pool.execute(move || {
             let tree_transmitter = tree_transmitter;
             tree_transmitter
                 .send(if move_phase == 0 {
@@ -639,7 +716,7 @@ pub mod actions {
         });
 
         let lumber_forest = Arc::clone(&shared_forest);
-        thread::spawn(move || {
+        pool.execute(move || {
             let lumber_transmitter = lumber_transmitter;
             lumber_transmitter
                 .send(if move_phase < 3 {
@@ -652,7 +729,7 @@ pub mod actions {
 
         let bear_forest = Arc::clone(&shared_forest);
 
-        thread::spawn(move || {
+        pool.execute(move || {
             let bear_transmiter = bear_transmiter;
             bear_transmiter
                 .send(process_bear(&bear_forest, &mut rand::thread_rng()))
