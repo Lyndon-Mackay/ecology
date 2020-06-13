@@ -29,9 +29,9 @@ fn main() {
 
     // simulate(size);
 
-    let muliThread = matches.is_present("multi");
+    let muli_thread = matches.is_present("multi");
 
-    println!("{}", muliThread);
+    println!("{}", muli_thread);
 
-    simulate(size,muliThread);
+    simulate(size, muli_thread);
 }
