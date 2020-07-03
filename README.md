@@ -6,3 +6,5 @@ https://www.reddit.com/r/dailyprogrammer/comments/27h53e/662014_challenge_165_ha
 This program contains multiple ways of implementing the specifications some using multithreading and some single thread.
 
 A signle threaded implementation is later planned to be ported to web assembly howver i have other personal projectest to attend to first.
+
+to see usuage run the program with -h flag
